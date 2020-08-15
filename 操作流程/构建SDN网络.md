@@ -71,6 +71,8 @@ ovs-vsctl set-controller s2 tcp:127.0.0.1:6653
 
 ![image-20200809164118601](/home/zen/.config/Typora/typora-user-images/image-20200809164118601.png)
 
+
+
 拓扑图
 
 ![image-20200811131312733](/home/zen/.config/Typora/typora-user-images/image-20200811131312733.png)
@@ -92,7 +94,7 @@ ovs-vsctl add-br s3
 查看
 ovs-vsctl show
 
-s1添加端口p1, p2
+s1添加端口p1, p2, p5
 ovs-vsctl add-port s1 p1
 ovs-vsctl set Interface p1 ofport_request=10
 ovs-vsctl set Interface p1 type=internal
@@ -103,7 +105,13 @@ ovs-vsctl set Interface p2 ofport_request=11
 ovs-vsctl set Interface p2 type=internal
 ethtool -i p2
 
-s2添加端口p3, p4
+ovs-vsctl add-port s1 p5
+ovs-vsctl set Interface p5 ofport_request=12
+ovs-vsctl set Interface p5 type=internal
+ethtool -i p5
+
+
+s2添加端口p3, p4, p6
 ovs-vsctl add-port s2 p3
 ovs-vsctl set Interface p3 ofport_request=1
 ovs-vsctl set Interface p3 type=internal
@@ -114,16 +122,27 @@ ovs-vsctl set Interface p4 ofport_request=2
 ovs-vsctl set Interface p4 type=internal
 ethtool -i p4
 
-s3添加端口p5, p6
-ovs-vsctl add-port s3 p5
-ovs-vsctl set Interface p5 ofport_request=10
-ovs-vsctl set Interface p5 type=internal
-ethtool -i p5
-
-ovs-vsctl add-port s3 p6
-ovs-vsctl set Interface p6 ofport_request=11
+ovs-vsctl add-port s2 p6
+ovs-vsctl set Interface p6 ofport_request=3
 ovs-vsctl set Interface p6 type=internal
 ethtool -i p6
+
+
+s3添加端口p7, p8, p9
+ovs-vsctl add-port s3 p7
+ovs-vsctl set Interface p7 ofport_request=1
+ovs-vsctl set Interface p7 type=internal
+ethtool -i p7
+
+ovs-vsctl add-port s3 p8
+ovs-vsctl set Interface p8 ofport_request=2
+ovs-vsctl set Interface p8 type=internal
+ethtool -i p8
+
+ovs-vsctl add-port s3 p9
+ovs-vsctl set Interface p9 ofport_request=3
+ovs-vsctl set Interface p9 type=internal
+ethtool -i p9
 
 
 创建虚拟主机h1, h2, h3
@@ -138,57 +157,88 @@ ip netns exec h2 ip addr add 192.168.10.11/24 dev p4
 ip netns exec h2 ifconfig p4 promisc up
 
 ip netns add h3
-ip link set p5 netns h3
-ip netns exec h3 ip addr add 192.168.10.12/24 dev p5
-ip netns exec h3 ifconfig p5 promisc up
+ip link set p9 netns h3
+ip netns exec h3 ip addr add 192.168.10.12/24 dev p9
+ip netns exec h3 ifconfig p9 promisc up
+
 
 建立交换机之间的链路
 对应端口设置为patch
 ovs-vsctl set interface p2 type=patch
 ovs-vsctl set interface p3 type=patch
+
+ovs-vsctl set interface p5 type=patch
+ovs-vsctl set interface p7 type=patch
+
 ovs-vsctl set interface p6 type=patch
+ovs-vsctl set interface p8 type=patch
+
 
 创建p2和p3之间的链路
 ovs-vsctl set interface p2 options:peer=p3
 ovs-vsctl set interface p3 options:peer=p2
 
-创建p2和p6之间的链路
-ovs-vsctl set interface p2 options:peer=p6
-ovs-vsctl set interface p6 options:peer=p2
+创建p5和p7之间的链路
+ovs-vsctl set interface p5 options:peer=p7
+ovs-vsctl set interface p7 options:peer=p5
 
-创建p3和p6之间的链路
-ovs-vsctl set interface p3 options:peer=p6
-ovs-vsctl set interface p6 options:peer=p3
+创建p6和p8之间的链路
+ovs-vsctl set interface p6 options:peer=p8
+ovs-vsctl set interface p8 options:peer=p6
 
 
 
 添加流表项
 s1的流表项
 ovs-ofctl add-flow s1 "in_port=10, actions=output:11"
+ovs-ofctl add-flow s1 "in_port=10, actions=output:12"
 ovs-ofctl add-flow s1 "in_port=11, actions=output:10"
+ovs-ofctl add-flow s1 "in_port=11, actions=output:12"
+ovs-ofctl add-flow s1 "in_port=12, actions=output:10"
+ovs-ofctl add-flow s1 "in_port=12, actions=output:11"
 
 s2的流表项
 ovs-ofctl add-flow s2 "in_port=1, actions=output:2"
+ovs-ofctl add-flow s2 "in_port=1, actions=output:3"
 ovs-ofctl add-flow s2 "in_port=2, actions=output:1"
+ovs-ofctl add-flow s2 "in_port=2, actions=output:3"
+ovs-ofctl add-flow s2 "in_port=3, actions=output:1"
+ovs-ofctl add-flow s2 "in_port=3, actions=output:2"
 
 s3的流表项
-ovs-ofctl add-flow s3 "in_port=10, actions=output:11"
-ovs-ofctl add-flow s3 "in_port=11, actions=output:10"
+ovs-ofctl add-flow s3 "in_port=1, actions=output:2"
+ovs-ofctl add-flow s3 "in_port=1, actions=output:3"
+ovs-ofctl add-flow s3 "in_port=2, actions=output:1"
+ovs-ofctl add-flow s3 "in_port=2, actions=output:3"
+ovs-ofctl add-flow s3 "in_port=3, actions=output:1"
+ovs-ofctl add-flow s3 "in_port=3, actions=output:2"
 
 测试
 ip netns exec h1 ping 192.168.10.11
 ip netns exec h2 ping 192.168.10.10
+ip netns exec h3 ping 192.168.10.11
+
+ovs-vsctl set-controller s3 tcp:127.0.0.1:6653
+
+查看流表信息
+ovs-ofctl -O OpenFlow13 dump-flows s1
+ovs-ofctl -O OpenFlow13 dump-flows s2
+ovs-ofctl -O OpenFlow13 dump-flows s3
 ```
 
 
 
-![image-20200811131454434](/home/zen/.config/Typora/typora-user-images/image-20200811131454434.png)
+![image-20200815102610723](/home/zen/.config/Typora/typora-user-images/image-20200815102610723.png)
+
+![image-20200815102936885](/home/zen/.config/Typora/typora-user-images/image-20200815102936885.png)
+
+![image-20200815103020036](/home/zen/.config/Typora/typora-user-images/image-20200815103020036.png)
+
+![image-20200815103519439](/home/zen/.config/Typora/typora-user-images/image-20200815103519439.png)
 
 
 
-![image-20200811131706415](/home/zen/.config/Typora/typora-user-images/image-20200811131706415.png)
-
-
+#### 附录
 
 代码下发流表
 
